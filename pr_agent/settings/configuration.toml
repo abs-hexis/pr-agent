@@ -234,6 +234,13 @@ publish_inline_comments_fallback_with_verification = true
 try_fix_invalid_inline_comments = true
 app_name = "pr-agent"
 ignore_bot_pr = true
+# HEXIS PATCH (stage 2): treat `@<bot> <text>` in any PR comment as `/ask <text>`
+# so users can address the bot conversationally instead of memorising slash commands.
+enable_bot_mention_routing = true
+# Bot username (without the trailing `[bot]`). Set this to the slug of your
+# GitHub App, e.g. `hexis-pr-agent`. Leave empty to rely solely on the app slug
+# advertised in `performed_via_github_app.slug` of the webhook payload.
+bot_mention_username = ""
 
 [github_action_config]
 # auto_review = true    # set as env var in .github/workflows/pr-agent.yaml

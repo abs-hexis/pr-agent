@@ -93,8 +93,67 @@ async def handle_comments_on_pr(body: Dict[str, Any],
             comment_body = '/ask' + comment_body_split[1] +' \n' +comment_body_split[0].strip().lstrip('>')
             get_logger().info(f"Reformatting comment_body so command is at the beginning: {comment_body}")
         else:
-            get_logger().info("Ignoring comment not starting with /")
-            return {}
+            # =================================================================
+            # HEXIS PATCH (stage 2): treat `@<bot> <text>` as `/ask <text>`
+            # =================================================================
+            # Lets users address the bot conversationally instead of memorising
+            # slash commands. Works in:
+            #   - top-level PR comments  -> /ask
+            #   - replies in inline code threads -> /ask -> /ask_line (existing
+            #     code below converts /ask on a line subject_type to /ask_line)
+            # Avoid loops: ignore if the comment author is the bot itself.
+            mention_enabled = get_settings().github.get(
+                "enable_bot_mention_routing", True
+            )
+            sender_login = (body.get("sender", {}) or {}).get("login", "") or ""
+            sender_is_bot = (
+                (body.get("sender", {}) or {}).get("type") == "Bot"
+                or sender_login.endswith("[bot]")
+            )
+            if mention_enabled and not sender_is_bot:
+                bot_username = get_settings().github.get(
+                    "bot_mention_username", ""
+                )
+                # Build candidate handles to detect (@name and @name[bot]).
+                handles: list[str] = []
+                if bot_username:
+                    handles.append(f"@{bot_username}")
+                    handles.append(f"@{bot_username}[bot]")
+                # Always allow the literal app slug if installation event has it
+                app_slug = (
+                    (body.get("comment", {}) or {})
+                    .get("performed_via_github_app", {})
+                    .get("slug", "")
+                ) or ""
+                if app_slug:
+                    handles.append(f"@{app_slug}")
+                    handles.append(f"@{app_slug}[bot]")
+
+                matched_handle = next(
+                    (h for h in handles if h and h.lower() in comment_body.lower()),
+                    None,
+                )
+                if matched_handle:
+                    cleaned = comment_body
+                    # strip the handle (case-insensitive single replace)
+                    import re as _re
+                    cleaned = _re.sub(
+                        _re.escape(matched_handle), "", cleaned, count=1,
+                        flags=_re.IGNORECASE,
+                    ).strip()
+                    if not cleaned:
+                        cleaned = "Please review this in context."
+                    comment_body = f"/ask {cleaned}"
+                    get_logger().info(
+                        f"[hexis] Bot mention detected ({matched_handle}); "
+                        f"routing as /ask: {comment_body!r}"
+                    )
+                else:
+                    get_logger().info("Ignoring comment not starting with /")
+                    return {}
+            else:
+                get_logger().info("Ignoring comment not starting with /")
+                return {}
     disable_eyes = False
     if "issue" in body and "pull_request" in body["issue"] and "url" in body["issue"]["pull_request"]:
         api_url = body["issue"]["pull_request"]["url"]
