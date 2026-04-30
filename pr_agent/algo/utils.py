@@ -64,6 +64,7 @@ class PRReviewHeader(str, Enum):
 
 
 class ReasoningEffort(str, Enum):
+    MAX = "max"      # HEXIS PATCH: highest reasoning effort (Opus 4.7+)
     XHIGH = "xhigh"
     HIGH = "high"
     MEDIUM = "medium"

@@ -5,7 +5,11 @@ import requests
 from litellm import acompletion
 from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
 
-from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
+# HEXIS PATCH: must be imported before any acompletion() call so the
+# AnthropicConfig._apply_output_config monkey-patch is in place.
+from pr_agent.algo.ai_handlers import litellm_hexis_patches  # noqa: F401
+
+from pr_agent.algo import CLAUDE_ADAPTIVE_THINKING_MODELS, CLAUDE_EXTENDED_THINKING_MODELS, NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_helpers import _handle_streaming_response, MockResponse, _get_azure_ad_token, \
     _process_litellm_extra_body
@@ -147,8 +151,11 @@ class LiteLLMAIHandler(BaseAiHandler):
         # Models that support reasoning effort
         self.support_reasoning_models = SUPPORT_REASONING_EFFORT_MODELS
 
-        # Models that support extended thinking
+        # Models that support extended thinking (legacy: Claude 3.7 Sonnet only)
         self.claude_extended_thinking_models = CLAUDE_EXTENDED_THINKING_MODELS
+
+        # HEXIS PATCH: Models that support the new adaptive thinking schema (Opus 4.6 / 4.7+)
+        self.claude_adaptive_thinking_models = CLAUDE_ADAPTIVE_THINKING_MODELS
 
         # Models that require streaming
         self.streaming_required_models = STREAMING_REQUIRED_MODELS
@@ -199,6 +206,52 @@ class LiteLLMAIHandler(BaseAiHandler):
         if get_settings().config.verbosity_level >= 2:
             get_logger().info("Temperature may only be set to 1 when thinking is enabled with claude models.")
         kwargs["temperature"] = 1
+
+        return kwargs
+
+    # =========================================================================
+    # HEXIS PATCH: Adaptive thinking for Claude Opus 4.6 / 4.7+
+    # =========================================================================
+    # The new schema (required by Opus 4.7, supported by 4.6):
+    #   {
+    #     "thinking": {"type": "adaptive"},
+    #     "output_config": {"effort": "low|medium|high|xhigh|max"}
+    #   }
+    # The model decides how much to think; `effort` is the upper bound.
+    # The OLD `{"type": "enabled", "budget_tokens": N}` schema is REJECTED with 400.
+    # =========================================================================
+    def _configure_claude_adaptive_thinking(self, model: str, kwargs: dict) -> dict:
+        """Inject adaptive-thinking + output_config.effort for newer Claude models."""
+        from pr_agent.algo.utils import ReasoningEffort  # local import to avoid cycles
+
+        # Accept config.reasoning_effort (default "max" for these models).
+        config_effort = get_settings().config.get("reasoning_effort", "max")
+        try:
+            ReasoningEffort(config_effort)
+            effort = config_effort
+        except (ValueError, TypeError):
+            effort = ReasoningEffort.MAX.value if hasattr(ReasoningEffort, "MAX") else "max"
+            get_logger().warning(
+                f"Invalid reasoning_effort '{config_effort}'. Falling back to '{effort}'. "
+                f"Valid values: low, medium, high, xhigh, max."
+            )
+
+        kwargs["thinking"] = {"type": "adaptive"}
+
+        # `output_config` is a top-level field that litellm's anthropic
+        # transformation knows about (see AnthropicConfig._apply_output_config).
+        # It must NOT go into `extra_body` — extra_body is forwarded literally
+        # to the Anthropic API which rejects unknown fields with HTTP 400.
+        kwargs["output_config"] = {"effort": effort}
+
+        # Adaptive thinking, like extended thinking, requires temperature=1.
+        kwargs["temperature"] = 1
+
+        if get_settings().config.verbosity_level >= 2:
+            get_logger().info(
+                f"[adaptive-thinking] model={model} effort={effort} "
+                f"thinking={kwargs['thinking']} output_config={kwargs['output_config']}"
+            )
 
         return kwargs
 
@@ -368,6 +421,12 @@ class LiteLLMAIHandler(BaseAiHandler):
             # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
             if (model in self.claude_extended_thinking_models) and get_settings().config.get("enable_claude_extended_thinking", False):
                 kwargs = self._configure_claude_extended_thinking(model, kwargs)
+
+            # HEXIS PATCH: adaptive thinking for Opus 4.6 / 4.7+
+            # gated on `enable_claude_adaptive_thinking` (default true if model supports it)
+            if (model in self.claude_adaptive_thinking_models) and \
+               get_settings().config.get("enable_claude_adaptive_thinking", True):
+                kwargs = self._configure_claude_adaptive_thinking(model, kwargs)
 
             if get_settings().litellm.get("enable_callbacks", False):
                 kwargs = self.add_litellm_callbacks(kwargs)

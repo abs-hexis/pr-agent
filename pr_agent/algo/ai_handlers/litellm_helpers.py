@@ -93,7 +93,8 @@ def _process_litellm_extra_body(kwargs: dict) -> dict:
     Raises:
         ValueError: If extra_body contains invalid JSON, unsupported keys, or colliding keys
     """
-    allowed_extra_body_keys = {"processing_mode", "service_tier"}
+    # HEXIS PATCH: allow `output_config` for Claude Opus 4.6/4.7 adaptive thinking effort.
+    allowed_extra_body_keys = {"processing_mode", "service_tier", "output_config"}
     extra_body = getattr(getattr(get_settings(), "litellm", None), "extra_body", None)
     if extra_body:
         try:

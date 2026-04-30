@@ -79,8 +79,11 @@ MAX_TOKENS = {
     'vertex_ai/claude-opus-4@20250514': 200000,
     'vertex_ai/claude-opus-4-1@20250805': 200000,
     'vertex_ai/claude-opus-4-5@20251101': 200000,
-    'vertex_ai/claude-opus-4-6@20260120': 200000,
-    'vertex_ai/claude-opus-4-6': 200000,
+    'vertex_ai/claude-opus-4-6@20260120': 1000000,  # HEXIS PATCH: 1M context (was 200000)
+    'vertex_ai/claude-opus-4-6': 1000000,           # HEXIS PATCH: 1M context (was 200000)
+    # HEXIS PATCH: Opus 4.7 (1M context, adaptive thinking)
+    'vertex_ai/claude-opus-4-7': 1000000,
+    'vertex_ai/claude-opus-4-7@20260311': 1000000,
     'vertex_ai/claude-3-5-sonnet@20240620': 100000,
     'vertex_ai/claude-3-5-sonnet-v2@20241022': 100000,
     'vertex_ai/claude-3-7-sonnet@20250219': 200000,
@@ -277,6 +280,21 @@ SUPPORT_REASONING_EFFORT_MODELS = [
 CLAUDE_EXTENDED_THINKING_MODELS = [
     "anthropic/claude-3-7-sonnet-20250219",
     "claude-3-7-sonnet-20250219"
+]
+
+# HEXIS PATCH: Models that support the *new* adaptive thinking schema:
+#   {"thinking": {"type": "adaptive"}, "output_config": {"effort": "max"}}
+# These models REJECT the old extended-thinking schema (`type: "enabled"` + budget_tokens).
+# Effort levels: "low", "medium", "high", "xhigh", "max".
+CLAUDE_ADAPTIVE_THINKING_MODELS = [
+    "vertex_ai/claude-opus-4-7",
+    "vertex_ai/claude-opus-4-7@20260311",
+    "anthropic/claude-opus-4-7",
+    "claude-opus-4-7",
+    "vertex_ai/claude-opus-4-6",
+    "vertex_ai/claude-opus-4-6@20260120",
+    "anthropic/claude-opus-4-6",
+    "claude-opus-4-6",
 ]
 
 # Models that require streaming mode

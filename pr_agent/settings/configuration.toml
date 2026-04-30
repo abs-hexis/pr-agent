@@ -56,11 +56,15 @@ ignore_language_framework = [] # a list of code-generation languages or framewor
 #
 is_auto_command = false # will be auto-set to true if the command is triggered by an automation
 enable_ai_metadata = false # will enable adding ai metadata
-reasoning_effort = "medium" # "low", "medium", "high"
+reasoning_effort = "medium" # HEXIS PATCH valid values: "minimal", "low", "medium", "high", "xhigh", "max"
 # extended thinking for Claude reasoning models
 enable_claude_extended_thinking = false # Set to true to enable extended thinking feature
 extended_thinking_budget_tokens = 2048
 extended_thinking_max_output_tokens = 4096
+# HEXIS PATCH: adaptive thinking for Claude Opus 4.6/4.7+
+# When true (default), supported models get {thinking:{type:adaptive}} +
+# {output_config:{effort:<reasoning_effort>}} automatically.
+enable_claude_adaptive_thinking = true
 # Extract issue number from PR source branch name (e.g. feature/1-auth-google -> issue #1). When true, branch-derived
 # issue URLs are merged with tickets from the PR description for compliance. Set to false to restore description-only behaviour.
 # Note: Branch-name extraction is GitHub-only for now; other providers planned for later.
