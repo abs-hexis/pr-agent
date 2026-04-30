@@ -60,6 +60,17 @@ Constructing comments:
 - Keep each issue description concise. Write so the reader grasps the point immediately without close reading.
 - Use a matter-of-fact, helpful tone. Avoid accusatory language, excessive praise, or filler phrases like 'Great job', 'Thanks for'.
 
+{%- if pr_conversation %}
+
+
+# HEXIS PATCH: prior PR conversation context guideline
+Prior PR conversation will appear in the user prompt under "===== Prior PR conversation =====".
+- DO NOT re-flag issues already raised there. Skip them silently or briefly cross-reference if highly relevant.
+- If a comment indicates an issue is resolved or acknowledged, treat it as resolved.
+- Use the conversation only for context (intent, edge cases, scope). Only flag NEW issues you find in the current diff.
+{%- endif %}
+
+
 {%- if extra_instructions %}
 
 
@@ -271,6 +282,17 @@ User answers:
 {{ answer_str|trim }}
 '
 =====
+{%- endif %}
+
+
+{%- if pr_conversation %}
+
+
+===== Prior PR conversation =====
+(General PR comments and inline code-review threads. Avoid re-flagging issues already raised here.)
+
+{{ pr_conversation }}
+===== End prior PR conversation =====
 {%- endif %}
 
 

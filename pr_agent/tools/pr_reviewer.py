@@ -99,6 +99,8 @@ class PRReviewer:
             "related_tickets": get_settings().get('related_tickets', []),
             'duplicate_prompt_examples': get_settings().config.get('duplicate_prompt_examples', False),
             "date": datetime.datetime.now().strftime('%Y-%m-%d'),
+            # HEXIS PATCH: prior PR conversation context (see _collect_pr_conversation_context)
+            "pr_conversation": self._collect_pr_conversation_context(),
         }
 
         self.token_handler = TokenHandler(
@@ -182,6 +184,111 @@ class PRReviewer:
             self.git_provider.remove_initial_comment()
         except Exception as e:
             get_logger().error(f"Failed to review PR: {e}")
+
+    # =========================================================================
+    # HEXIS PATCH: prior PR conversation context for context-aware reviews
+    # =========================================================================
+    # Pulls every general PR comment + every inline review comment on the PR
+    # and formats it as a markdown block. Injected into the review prompt as
+    # `pr_conversation` so the reviewer:
+    #   - acknowledges what's already been raised (doesn't re-flag the same issue)
+    #   - cross-references prior discussion when relevant
+    #   - on push-triggered re-reviews, knows what was already discussed
+    #
+    # Gated on `pr_reviewer.include_pr_conversation` (default true).
+    # =========================================================================
+    def _collect_pr_conversation_context(self) -> str:
+        if not get_settings().pr_reviewer.get("include_pr_conversation", True):
+            return ""
+        try:
+            chunks: list[str] = []
+
+            # ---- 1. Top-level PR (issue) comments ----
+            try:
+                issue_comments = list(self.git_provider.get_issue_comments() or [])
+            except Exception as e:
+                get_logger().debug(f"[hexis] Could not fetch issue comments: {e}")
+                issue_comments = []
+
+            for c in issue_comments:
+                try:
+                    body = (getattr(c, "body", "") or "").strip()
+                    if not body:
+                        continue
+                    user = getattr(getattr(c, "user", None), "login", "unknown")
+                    when = getattr(c, "created_at", "")
+                    chunks.append(f"[PR comment] @{user} ({when}):\n{body}")
+                except Exception:
+                    continue
+
+            # ---- 2. Inline review comments (file-line threads) ----
+            # Only available on GitHub provider (PyGithub PR object).
+            try:
+                pr_obj = getattr(self.git_provider, "pr", None)
+                inline_comments = list(pr_obj.get_comments()) if pr_obj else []
+            except Exception as e:
+                get_logger().debug(f"[hexis] Could not fetch inline comments: {e}")
+                inline_comments = []
+
+            # group by thread root for compact rendering
+            roots: dict[int, list] = {}
+            for c in inline_comments:
+                try:
+                    raw = getattr(c, "raw_data", {}) or {}
+                    root_id = raw.get("in_reply_to_id") or c.id
+                    roots.setdefault(root_id, []).append(c)
+                except Exception:
+                    continue
+
+            for root_id, thread in roots.items():
+                try:
+                    thread.sort(key=lambda x: getattr(x, "created_at", ""))
+                    head = thread[0]
+                    path = getattr(head, "path", "?")
+                    line = (
+                        getattr(head, "line", None)
+                        or getattr(head, "original_line", None)
+                        or "?"
+                    )
+                    block = [f"[Inline thread] `{path}:{line}`"]
+                    for c in thread:
+                        user = getattr(getattr(c, "user", None), "login", "unknown")
+                        body = (getattr(c, "body", "") or "").strip()
+                        if not body:
+                            continue
+                        block.append(f"  @{user}: {body}")
+                    if len(block) > 1:
+                        chunks.append("\n".join(block))
+                except Exception:
+                    continue
+
+            if not chunks:
+                return ""
+
+            joined = "\n\n---\n\n".join(chunks)
+
+            # Soft cap so massive PRs don't blow up the prompt budget.
+            max_chars = get_settings().pr_reviewer.get(
+                "max_pr_conversation_chars", 60000
+            )
+            if isinstance(max_chars, int) and max_chars > 0 and len(joined) > max_chars:
+                joined = (
+                    joined[-max_chars:]
+                    + "\n\n[...older comments truncated...]"
+                )
+                get_logger().info(
+                    f"[hexis] Truncated PR conversation context to last {max_chars} chars"
+                )
+
+            get_logger().info(
+                f"[hexis] Loaded prior PR conversation context: "
+                f"{len(issue_comments)} issue comments, {len(roots)} inline threads "
+                f"({len(joined)} chars)"
+            )
+            return joined
+        except Exception as e:
+            get_logger().warning(f"[hexis] Failed to collect PR conversation context: {e}")
+            return ""
 
     def _should_publish_review_no_suggestions(self, pr_review: str) -> bool:
         return get_settings().pr_reviewer.get('publish_output_no_suggestions', True) or "No major issues detected" not in pr_review

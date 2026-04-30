@@ -85,6 +85,12 @@ require_security_review=true
 require_estimate_contribution_time_cost=false
 require_todo_scan=false
 require_ticket_analysis_review=true
+# HEXIS PATCH: pull all prior PR comments (general + inline) into the review prompt
+# so the reviewer doesn't re-flag what was already discussed.
+include_pr_conversation=true
+# Soft cap on the conversation block (chars). Older comments are truncated first.
+# Set to 0 to disable the cap entirely (only safe with 1M-context models).
+max_pr_conversation_chars=60000
 # general options
 publish_output_no_suggestions=true # Set to "false" if you only need the reviewer's remarks (not labels, not "security audit", etc.) and want to avoid noisy "No major issues detected" comments.
 persistent_comment=true
