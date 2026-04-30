@@ -28,6 +28,13 @@ google-cloud-storage==2.10.0
 # HEXIS PATCH: explicit setuptools — fixes "No module named 'pkg_resources'" in
 # stripped python:3.12-slim images. setuptools provides pkg_resources.
 setuptools>=75.0
+# HEXIS PATCH (stage 3): the agentic reviewer needs JWT signing, dotenv loading,
+# tomli (already a transitive but pinning explicitly), and python-dotenv. All
+# already pulled by other deps but explicit makes the dep graph clearer.
+PyJWT>=2.10.1
+cryptography>=41.0.0
+python-dotenv>=1.0
+tomli>=2.0
 Jinja2==3.1.6
 litellm>=1.83.10
 loguru==0.7.2

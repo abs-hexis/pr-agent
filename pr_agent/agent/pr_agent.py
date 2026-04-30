@@ -18,14 +18,20 @@ from pr_agent.tools.pr_help_message import PRHelpMessage
 from pr_agent.tools.pr_line_questions import PR_LineQuestions
 from pr_agent.tools.pr_questions import PRQuestions
 from pr_agent.tools.pr_reviewer import PRReviewer
+# HEXIS PATCH (stage 3): agentic reviewer powered by Claude Opus 4.7 with
+# repo-wide tool access. Replaces /review by default; /review_classic keeps
+# the fast non-agentic version as a fallback.
+from pr_agent.tools.pr_reviewer_agentic import PRReviewerAgentic
 from pr_agent.tools.pr_similar_issue import PRSimilarIssue
 from pr_agent.tools.pr_update_changelog import PRUpdateChangelog
 
 command2class = {
-    "auto_review": PRReviewer,
+    "auto_review": PRReviewerAgentic,
     "answer": PRReviewer,
-    "review": PRReviewer,
-    "review_pr": PRReviewer,
+    "review": PRReviewerAgentic,
+    "review_pr": PRReviewerAgentic,
+    # HEXIS PATCH: keep classic reviewer accessible as a fallback
+    "review_classic": PRReviewer,
     "describe": PRDescription,
     "describe_pr": PRDescription,
     "improve": PRCodeSuggestions,

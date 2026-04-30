@@ -268,9 +268,39 @@ async def handle_push_trigger_for_new_commits(body: Dict[str, Any],
 def handle_closed_pr(body, event, action, log_context):
     pull_request = body.get("pull_request", {})
     is_merged = pull_request.get("merged", False)
+    api_url = pull_request.get("url", "")
+
+    # HEXIS PATCH (stage 3): clean up agentic-reviewer disk artifacts on
+    # ANY PR close (merged or otherwise). Also cancel any in-flight agentic
+    # review for this PR.
+    try:
+        from pr_agent.agentic.config import load_settings
+        from pr_agent.agentic.github_app import parse_pr_url
+        from pr_agent.agentic.registry import REGISTRY
+        from pr_agent.agentic.workspace import cleanup_runs_for_pr
+        if api_url:
+            pr_ref = parse_pr_url(api_url)
+            settings = load_settings()
+            removed = cleanup_runs_for_pr(settings.runs_dir, pr_ref)
+            get_logger().info(
+                f"[agentic-cleanup] PR {pr_ref.full_name}#{pr_ref.number} closed "
+                f"(merged={is_merged}); removed {removed} agentic run dir(s)"
+            )
+            # Cancel in-flight review if any
+            try:
+                import asyncio as _asyncio
+                _asyncio.create_task(
+                    REGISTRY.cancel(pr_ref, reason="PR closed")
+                )
+            except RuntimeError:
+                # No running event loop — skip, the task wouldn't be alive anyway
+                pass
+    except Exception as e:
+        get_logger().warning(f"[agentic-cleanup] Failed: {e}")
+
+    # Original behavior: only collect stats when PR is actually merged
     if not is_merged:
         return
-    api_url = pull_request.get("url", "")
     pr_statistics = get_git_provider()(pr_url=api_url).calc_pr_statistics(pull_request)
     log_context["api_url"] = api_url
     get_logger().info("PR-Agent statistics for closed PR", analytics=True, pr_statistics=pr_statistics, **log_context)
@@ -410,8 +440,9 @@ async def handle_request(body: Dict[str, Any], event: str):
     elif event == 'pull_request' and action == 'synchronize':
         await handle_push_trigger_for_new_commits(body, event, sender,sender_id,  action, log_context, agent)
     elif event == 'pull_request' and action == 'closed':
-        if get_settings().get("CONFIG.ANALYTICS_FOLDER", ""):
-            handle_closed_pr(body, event, action, log_context)
+        # HEXIS PATCH (stage 3): always fire — handle_closed_pr now also does
+        # agentic-reviewer disk cleanup (independent of analytics_folder).
+        handle_closed_pr(body, event, action, log_context)
     else:
         get_logger().info(f"event {event=} action {action=} does not require any handling")
     return {}

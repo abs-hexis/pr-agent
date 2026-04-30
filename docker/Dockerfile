@@ -1,6 +1,8 @@
 FROM python:3.12.10-slim AS base
 
-RUN apt update && apt install --no-install-recommends -y git curl && apt-get clean && rm -rf /var/lib/apt/lists/*
+# HEXIS PATCH (stage 3): added `ripgrep` for the agentic reviewer's
+# search_codebase / find_definition / find_callers tools.
+RUN apt update && apt install --no-install-recommends -y git curl ripgrep && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ADD pyproject.toml .
