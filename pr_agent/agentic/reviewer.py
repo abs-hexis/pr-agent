@@ -106,7 +106,7 @@ def _approx_message_tokens(messages: list[dict]) -> int:
 
 def _estimate_cost(input_tokens: int, output_tokens: int, model: str) -> float | None:
     """Anthropic Opus 4.x on Vertex (as of 2026): $15/M input, $75/M output."""
-    if "opus-4-7" in model or "opus-4-6" in model:
+    if "opus-4-8" in model or "opus-4-6" in model:
         return (input_tokens * 15 / 1_000_000) + (output_tokens * 75 / 1_000_000)
     return None
 

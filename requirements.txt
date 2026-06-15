@@ -1,9 +1,11 @@
 # =============================================================================
-# HEXIS PATCH: requirements.txt rewritten to support litellm>=1.83.10
-# (which is needed for Claude Opus 4.7 routing on Vertex AI).
+# HEXIS PATCH: requirements.txt rewritten to support litellm>=1.89.0
+# (which is needed for Claude Opus 4.8 routing on Vertex AI + the new
+# data-driven `_supports_effort_level` validator that natively whitelists
+# `effort='max'` on Opus 4.8 — removing the need for our monkey-patch).
 #
 # Changes from upstream:
-#   litellm 1.81.12     → >=1.83.10
+#   litellm 1.81.12     → >=1.89.0
 #   tiktoken 0.8.0      → ==0.12.0   (litellm hard pin)
 #   aiohttp 3.12.15     → ==3.13.3   (litellm hard pin)
 #   pydantic 2.8.2      → ==2.12.5   (litellm hard pin)
@@ -36,7 +38,7 @@ cryptography>=41.0.0
 python-dotenv>=1.0
 tomli>=2.0
 Jinja2==3.1.6
-litellm>=1.83.10
+litellm>=1.89.0
 loguru==0.7.2
 msrest==0.7.1
 openai>=1.55.3

@@ -40,10 +40,10 @@ SECRETS_FILE = Path(
 class LLMConfig:
     """Defaults for the LiteLLM call. All env-overridable."""
     model: str = field(default_factory=lambda: os.getenv(
-        "AGENTIC_MODEL", "vertex_ai/claude-opus-4-7"
+        "AGENTIC_MODEL", "vertex_ai/claude-opus-4-8"
     ))
     fallback_model: str = field(default_factory=lambda: os.getenv(
-        "AGENTIC_FALLBACK_MODEL", "vertex_ai/claude-opus-4-6"
+        "AGENTIC_FALLBACK_MODEL", "vertex_ai/claude-opus-4-7"
     ))
     vertex_project: str = field(default_factory=lambda: (
         os.getenv("VERTEXAI.VERTEX_PROJECT")
@@ -60,6 +60,8 @@ class LLMConfig:
     effort: str = field(default_factory=lambda: os.getenv(
         "AGENTIC_EFFORT", "max"
     ))  # one of: low, medium, high, xhigh, max
+    # Opus 4.x family supports up to 128K output on Vertex AI per the latest
+    # litellm model map; we cap at 64K to keep individual review costs bounded.
     max_output_tokens: int = field(default_factory=lambda: int(os.getenv(
         "AGENTIC_MAX_OUTPUT_TOKENS", "64000"
     )))
@@ -69,8 +71,10 @@ class LLMConfig:
 @dataclass
 class LoopConfig:
     """Caps the model can't exceed. Tunable from env."""
+    # Bumped 40 -> 100 to give the agent enough rounds to handle large PRs
+    # (e.g. cross-file refactors that need many search + read iterations).
     max_tool_rounds: int = field(default_factory=lambda: int(os.getenv(
-        "AGENTIC_MAX_TOOL_ROUNDS", "40"
+        "AGENTIC_MAX_TOOL_ROUNDS", "100"
     )))
     max_files_read: int = field(default_factory=lambda: int(os.getenv(
         "AGENTIC_MAX_FILES_READ", "50"
@@ -81,8 +85,10 @@ class LoopConfig:
     max_input_tokens: int = field(default_factory=lambda: int(os.getenv(
         "AGENTIC_MAX_INPUT_TOKENS", "800000"
     )))
+    # Bumped 300s -> 900s (15min) for the same reason. Opus 4.8 + max-effort
+    # thinking on a 50+ tool-round review can comfortably exceed 5 minutes.
     total_timeout_seconds: int = field(default_factory=lambda: int(os.getenv(
-        "AGENTIC_TIMEOUT_SECONDS", "300"
+        "AGENTIC_TIMEOUT_SECONDS", "900"
     )))
     # search_codebase
     search_max_results: int = field(default_factory=lambda: int(os.getenv(

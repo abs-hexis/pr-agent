@@ -84,6 +84,10 @@ MAX_TOKENS = {
     # HEXIS PATCH: Opus 4.7 (1M context, adaptive thinking)
     'vertex_ai/claude-opus-4-7': 1000000,
     'vertex_ai/claude-opus-4-7@20260311': 1000000,
+    'vertex_ai/claude-opus-4-7-20260416': 1000000,
+    # HEXIS PATCH: Opus 4.8 (1M context, adaptive thinking — same shape as 4.7)
+    'vertex_ai/claude-opus-4-8': 1000000,
+    'vertex_ai/claude-opus-4-8@default': 1000000,
     'vertex_ai/claude-3-5-sonnet@20240620': 100000,
     'vertex_ai/claude-3-5-sonnet-v2@20241022': 100000,
     'vertex_ai/claude-3-7-sonnet@20250219': 200000,
@@ -287,10 +291,18 @@ CLAUDE_EXTENDED_THINKING_MODELS = [
 # These models REJECT the old extended-thinking schema (`type: "enabled"` + budget_tokens).
 # Effort levels: "low", "medium", "high", "xhigh", "max".
 CLAUDE_ADAPTIVE_THINKING_MODELS = [
+    # Opus 4.8 (current default)
+    "vertex_ai/claude-opus-4-8",
+    "vertex_ai/claude-opus-4-8@default",
+    "anthropic/claude-opus-4-8",
+    "claude-opus-4-8",
+    # Opus 4.7
     "vertex_ai/claude-opus-4-7",
     "vertex_ai/claude-opus-4-7@20260311",
+    "vertex_ai/claude-opus-4-7-20260416",
     "anthropic/claude-opus-4-7",
     "claude-opus-4-7",
+    # Opus 4.6
     "vertex_ai/claude-opus-4-6",
     "vertex_ai/claude-opus-4-6@20260120",
     "anthropic/claude-opus-4-6",

@@ -412,7 +412,7 @@ If you encounter rate limiting:
         # Add fallback models for better reliability
         config.fallback_models: '["gpt-4o", "gpt-3.5-turbo"]'
         # Increase timeout for slower models
-        config.ai_timeout: "300"
+        config.ai_timeout: "900"
         github_action_config.auto_review: "true"
         github_action_config.auto_describe: "true"
         github_action_config.auto_improve: "true"

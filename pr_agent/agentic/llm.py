@@ -1,8 +1,8 @@
-"""LiteLLM wrapper that handles tool-calling against Vertex AI Claude Opus 4.7.
+"""LiteLLM wrapper that handles tool-calling against Vertex AI Claude Opus 4.x.
 
-Mirrors the litellm runtime monkey-patch from the production webhook server,
-so we can use `output_config.effort = "max"` even though stock litellm
-rejects it for Opus 4.7.
+litellm >= 1.89 natively whitelists Opus 4.6/4.7/4.8 for `effort='max'`
+(data-driven, via the model_prices JSON), so this module no longer needs a
+client-side monkey-patch. We keep a tiny legacy fallback for litellm < 1.89.
 """
 
 from __future__ import annotations
@@ -16,14 +16,17 @@ log = logging.getLogger("agentic.llm")
 
 
 # --------------------------------------------------------------------------- #
-# Runtime monkey-patch (same as production litellm_hexis_patches.py)
+# Legacy monkey-patch (only fires on litellm < 1.89)
 # --------------------------------------------------------------------------- #
 
 _PATCHED = False
 
 
 def apply_hexis_litellm_patches() -> None:
-    """Allow output_config.effort='max' on Claude Opus 4.7."""
+    """Allow `output_config.effort='max'` on Claude Opus 4.6/4.7/4.8.
+
+    No-op on litellm >= 1.89 (native data-driven validator).
+    """
     global _PATCHED
     if _PATCHED:
         return
@@ -31,6 +34,12 @@ def apply_hexis_litellm_patches() -> None:
         from litellm.llms.anthropic.chat.transformation import AnthropicConfig
     except Exception as e:
         log.warning("Could not import AnthropicConfig — running without HEXIS patch: %s", e)
+        return
+
+    # litellm >= 1.89 uses a data-driven validator; no patch needed.
+    if hasattr(AnthropicConfig, "_validate_effort_for_model"):
+        _PATCHED = True
+        log.info("[hexis] litellm >= 1.89 detected; skipping legacy effort-validator patch")
         return
 
     def patched_apply_output_config(self, data: dict, model: str, optional_params: dict) -> None:
@@ -43,12 +52,14 @@ def apply_hexis_litellm_patches() -> None:
         valid = {"high", "medium", "low", "xhigh", "max"}
         if effort and effort not in valid:
             raise ValueError(f"Invalid effort: {effort}. Must be one of {sorted(valid)}")
-        # HEXIS PATCH: also allow Opus 4.7 for `max`
+        # HEXIS PATCH: allow Opus 4.6, 4.7, AND 4.8 for `max`
         if effort == "max" and not (
-            self._is_opus_4_6_model(model) or self._is_opus_4_7_model(model)
+            self._is_opus_4_6_model(model)
+            or self._is_opus_4_7_model(model)
+            or "claude-opus-4-8" in model
         ):
             raise ValueError(
-                f"effort='max' is only supported by Claude Opus 4.6/4.7. Got: {model}"
+                f"effort='max' is only supported by Claude Opus 4.6/4.7/4.8. Got: {model}"
             )
         if effort == "xhigh" and not self._supports_effort_level(model, "xhigh"):
             raise ValueError(f"effort='xhigh' not supported by {model}")
@@ -56,7 +67,7 @@ def apply_hexis_litellm_patches() -> None:
 
     AnthropicConfig._apply_output_config = patched_apply_output_config
     _PATCHED = True
-    log.info("[hexis] Patched litellm AnthropicConfig._apply_output_config")
+    log.info("[hexis] Applied legacy AnthropicConfig._apply_output_config patch")
 
 
 # --------------------------------------------------------------------------- #
@@ -66,6 +77,7 @@ def apply_hexis_litellm_patches() -> None:
 # Anthropic Vertex AI hard caps for `max_tokens` per model.
 # Updated: 2026 — Opus 4.6/4.7 support up to 64K output tokens.
 _MAX_TOKENS_CAPS = {
+    "claude-opus-4-8": 64_000,
     "claude-opus-4-7": 64_000,
     "claude-opus-4-6": 64_000,
     # newer/older models can be added here
@@ -126,7 +138,8 @@ async def acompletion_with_tools(
         "vertex_location": vertex_location,
     }
 
-    if "claude-opus-4-7" in model or "claude-opus-4-6" in model:
+    # Attach adaptive-thinking + max-effort schema for any Opus 4.x model.
+    if any(tag in model for tag in ("claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8")):
         kwargs["thinking"] = {"type": "adaptive"}
         kwargs["output_config"] = {"effort": effort}
 
