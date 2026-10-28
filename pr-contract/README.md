@@ -28,7 +28,7 @@ followed by a PR per repository.
 | `workflows/pr-contract.yml` | Copied into each repo. Runs `check` on every PR. Becomes a required check. |
 | `workflows/release-notes.yml` | Copied into each repo. `accrue` on merge to mainline, `publish` on merge to `production`. |
 | `scripts/replay.cjs` | Read-only replay against merged PRs: what the check would have said. |
-| `tests/contract.test.cjs` | `node --test pr-contract/tests` |
+| `tests/contract.test.cjs` | `node --test pr-contract/tests/contract.test.cjs` |
 
 ## Rules in one screen
 
