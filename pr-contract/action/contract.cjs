@@ -371,10 +371,11 @@ function evaluate({ pr, files, config, profileName }) {
   }
 
   // Engines: every change carries a CHANGELOG line, a release statement, and a cutover note when bundles move.
+  // "Engine code" means the paths that change recommendations (the profile's 3a paths), not CI or docs.
+  const engineCodeChanged = files.some((f) => pathMatches(f.filename, profile.tier3a || []));
   if (profile.changelog) {
     const changelogTouched = files.some((f) => f.filename === profile.changelog);
-    const docsOnly = files.length > 0 && files.every((f) => pathMatches(f.filename, profile.cosmeticOnly || []));
-    if (!changelogTouched && !docsOnly) findings.push(`\`${profile.changelog}\` has no entry for this change. Add one under [UNRELEASED].`);
+    if (engineCodeChanged && !changelogTouched) findings.push(`\`${profile.changelog}\` has no entry for this change. Add one under [UNRELEASED].`);
     const release = sectionText(sections, 'Engine release');
     if (release !== null && isEmpty(release)) findings.push('Engine release is empty. State the CHANGELOG entry, which recommendation outputs change, the reference-athlete comparison and whether science review is needed.');
     const cutoverTouched = files.some((f) => pathMatches(f.filename, profile.cutoverPaths || []));
@@ -382,7 +383,7 @@ function evaluate({ pr, files, config, profileName }) {
       findings.push('calculation_bundles.py changed but no cutover date is declared in Deploy actions or Engine release.');
     }
   }
-  if (profile.dependencyRequiredAboveTier !== undefined && dependencies.none && tierRank(tier) > tierRank(profile.dependencyRequiredAboveTier)) {
+  if (profile.dependencyRequiredAboveTier !== undefined && dependencies.none && engineCodeChanged && tierRank(tier) > tierRank(profile.dependencyRequiredAboveTier)) {
     findings.push(`Tier ${tier} changes in this repository reach production through another repository. Name the carrying PR (hexis-backend pin) or \`unopened\` with the ticket.`);
   }
 

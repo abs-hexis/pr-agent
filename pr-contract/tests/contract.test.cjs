@@ -271,6 +271,9 @@ test('engine changes need a CHANGELOG entry, an Engine release statement, a cuto
   });
   assert.deepEqual(good.findings, [], good.findings.join('\n'));
   assert.equal(good.contract.engineRelease.startsWith('CHANGELOG yes'), true);
+  // A workflow-only change in the engines repository is 3b and needs neither a CHANGELOG line nor a carrying PR.
+  const ciOnly = contract.evaluate({ pr: pr({ body: enginesBody({ Tier: '3b', 'Deploy actions': 'workflow change only' }), repo: 'abs-hexis/hexis-engines-api' }), files: [file('.github/workflows/pr-contract.yml')], config, profileName: 'engines' });
+  assert.ok(!ciOnly.findings.some((f) => f.includes('CHANGELOG') || f.includes('carrying PR')), ciOnly.findings.join('\n'));
 });
 
 test('jira helpers name versions and render a marked comment', () => {
