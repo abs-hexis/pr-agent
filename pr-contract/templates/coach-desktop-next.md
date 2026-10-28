@@ -34,9 +34,9 @@ none
      A GraphQL or generated-types change with a `none` row fails the check: name the backend PR or explain in Why that production already has the fields.
      A single `none` row means coach ships alone. -->
 
-| Repository | PR | Order | Why |
-| --- | --- | --- | --- |
-| none | | | |
+| Repository | PR  | Order | Why |
+| ---------- | --- | ----- | --- |
+| none       |     |       |     |
 
 ## Evidence
 

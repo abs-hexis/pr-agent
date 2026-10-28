@@ -43,9 +43,9 @@ no API change
      PR: the link, or `unopened` with the ticket. Order: `before` (that PR must be in production first) · `after` (this PR first) · `together`.
      A single `none` row means the backend ships alone. -->
 
-| Repository | PR | Order | Why |
-| --- | --- | --- | --- |
-| none | | | |
+| Repository | PR  | Order | Why |
+| ---------- | --- | ----- | --- |
+| none       |     |       |     |
 
 ## Evidence
 

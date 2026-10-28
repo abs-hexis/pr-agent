@@ -42,9 +42,9 @@ OTA
      A GraphQL operation change with a `none` row fails the check: name the backend PR or explain in Why that production already has the fields.
      A single `none` row means the app ships alone. -->
 
-| Repository | PR | Order | Why |
-| --- | --- | --- | --- |
-| none | | | |
+| Repository | PR  | Order | Why |
+| ---------- | --- | ----- | --- |
+| none       |     |       |     |
 
 ## Evidence
 

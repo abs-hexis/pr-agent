@@ -36,8 +36,8 @@ none
      PR: the link, or `unopened` with the ticket. Order: `before` (that PR must be in production first) · `after` · `together`.
      A single `none` row is accepted only for Tier 0. -->
 
-| Repository | PR | Order | Why |
-| --- | --- | --- | --- |
+| Repository    | PR       | Order    | Why                                            |
+| ------------- | -------- | -------- | ---------------------------------------------- |
 | hexis-backend | unopened | together | backend release PR moves the python-engine pin |
 
 ## Evidence

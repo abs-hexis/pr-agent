@@ -29,9 +29,9 @@ none
      Order: `before` (that PR must be in production first) · `after` (this PR must be in production first) · `together` (same release window).
      Write a single `none` row when this repository ships alone. -->
 
-| Repository | PR | Order | Why |
-| --- | --- | --- | --- |
-| none | | | |
+| Repository | PR  | Order | Why |
+| ---------- | --- | ----- | --- |
+| none       |     |       |     |
 
 ## Evidence
 
