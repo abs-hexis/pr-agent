@@ -1,0 +1,41 @@
+# Copy into each application repository as .github/workflows/release-notes.yml.
+# A PR merged into the mainline is added to the draft GitHub Release "Next release".
+# A PR merged into the release branch publishes that draft under the date and the next merge starts a new one.
+# Repositories whose mainline is also the release branch (hexis-infra, hexis-localization) only accrue.
+
+name: Release notes
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: release-notes-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  accrue:
+    name: Add merged PR to the next release
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref != 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: abs-hexis/pr-agent/pr-contract/action@hexis-main
+        with:
+          mode: accrue
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish the release notes
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: abs-hexis/pr-agent/pr-contract/action@hexis-main
+        with:
+          mode: publish
+          token: ${{ secrets.GITHUB_TOKEN }}

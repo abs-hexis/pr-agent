@@ -1,0 +1,26 @@
+name: PR contract tests
+
+on:
+  push:
+    branches: [hexis-main]
+    paths: ["pr-contract/**"]
+  pull_request:
+    branches: [hexis-main]
+    paths: ["pr-contract/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: node --test pr-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: node --test pr-contract/tests

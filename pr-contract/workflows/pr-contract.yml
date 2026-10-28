@@ -1,0 +1,30 @@
+# Copy into each application repository as .github/workflows/pr-contract.yml.
+# Make the check "PR contract" required on the mainline branch once it has run green on three PRs.
+# No paths filter: every PR reports, so the required check never waits forever.
+
+name: PR contract
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-contract-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: PR contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate the pull request against the Hexis PR contract
+        uses: abs-hexis/pr-agent/pr-contract/action@hexis-main
+        with:
+          mode: check
+          token: ${{ secrets.GITHUB_TOKEN }}

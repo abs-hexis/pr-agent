@@ -1,0 +1,52 @@
+name: Hexis PR contract
+description: >
+  Validates a pull request against the Hexis PR contract (tier, release note, deploy actions, dependencies,
+  evidence, operational evidence), labels it, and accrues merged PRs into the draft "Next release".
+inputs:
+  mode:
+    description: check | accrue | publish
+    required: false
+    default: check
+  token:
+    description: GitHub token with pull-requests:write, issues:write and contents:write (for releases)
+    required: true
+  profile:
+    description: Override the repository profile (backend, engines, mobile, web, infra, localization)
+    required: false
+    default: ""
+  pr-number:
+    description: Pull request number when not running on a pull_request event
+    required: false
+    default: ""
+  template-url:
+    description: Link shown in the sticky comment
+    required: false
+    default: "https://app.notion.com/p/4074f18a6ad58103b302eae61f872d92"
+outputs:
+  tier:
+    description: The tier after escalation
+    value: ${{ steps.run.outputs.tier }}
+  contract:
+    description: The extracted contract as JSON
+    value: ${{ steps.run.outputs.contract }}
+  tickets:
+    description: Comma-separated HEX keys (publish mode)
+    value: ${{ steps.run.outputs.tickets }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+    - name: Run the PR contract
+      id: run
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        PR_CONTRACT_MODE: ${{ inputs.mode }}
+        PR_CONTRACT_PROFILE: ${{ inputs.profile }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_CONTRACT_TEMPLATE_URL: ${{ inputs.template-url }}
+        PR_CONTRACT_CONFIG: ${{ github.action_path }}/../config/profiles.json
+      run: node "${{ github.action_path }}/run.cjs"

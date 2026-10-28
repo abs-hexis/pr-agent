@@ -1,0 +1,118 @@
+{
+  "$comment": "Path rules per repository profile. The check raises the declared tier when a changed path matches, and derives the deploy actions a PR must declare. Edit here, not in the application repositories.",
+  "profiles": {
+    "backend": {
+      "mainline": "development",
+      "releaseBranch": "production",
+      "tier3a": ["prisma/", "src/lib/billing/", "src/lib/internal-b2b/", "src/lib/stripe", "src/lib/auth-context", "src/lib/clerk", "src/api/routes/auth", "src/api/controllers/auth", "src/lib/modular-integrations/core/", "python-engine", "scripts/export-graphql-schema.ts"],
+      "tier3b": [".github/workflows/", "Dockerfile", "docker/", "scripts/sync-db-schema", "scripts/deploy"],
+      "tier2": ["src/lib/modular-integrations/", "src/jobs/", "src/workers/", "src/lib/typesense"],
+      "cosmeticOnly": ["docs/", "README", ".md"],
+      "needs": {
+        "migration": ["prisma/migrations/"],
+        "schema": ["prisma/schema.prisma"],
+        "search-schema": ["src/lib/typesense", "scripts/typesense"],
+        "engine-pin": ["python-engine"],
+        "config": [".example.env", "src/config/env", "src/lib/config"],
+        "pipeline": [".github/workflows/", "Dockerfile", "docker/"],
+        "dependencies": ["package.json", "pnpm-lock.yaml"]
+      }
+    },
+    "engines": {
+      "mainline": "development",
+      "releaseBranch": "production",
+      "tier3a": ["engines/", "services.py", "calculation_bundles"],
+      "tier3b": [".github/workflows/", "Dockerfile"],
+      "tier2": [],
+      "cosmeticOnly": ["docs/", ".md"],
+      "needs": {
+        "engine-pin": ["engines/", "services.py", "calculation_bundles"],
+        "pipeline": [".github/workflows/", "Dockerfile"],
+        "dependencies": ["requirements", "pyproject.toml"]
+      }
+    },
+    "mobile": {
+      "mainline": "development",
+      "releaseBranch": "production",
+      "tier3a": ["src/graphql/", "src/lib/auth", "src/providers/auth", "src/lib/billing", "src/lib/instrumentation", "src/screens/auth"],
+      "tier3b": [".github/workflows/", ".eas/", "eas.json", "scripts/", ".github/scripts/"],
+      "tier2": ["src/app/", "src/components/", "src/screens/onboarding", "src/screens/food-log", "src/screens/home", "src/navigation"],
+      "cosmeticOnly": ["src/translations/", "assets/", "docs/", ".md", ".maestro/"],
+      "needs": {
+        "store-build": ["app.config.ts", "app.json", "eas.json", "ios/", "android/", "patches/", "package.json"],
+        "strings": ["src/translations/"],
+        "flag": ["src/lib/feature-flags", "src/constants/feature-flags"],
+        "pipeline": [".github/workflows/", ".eas/"],
+        "dependencies": ["package.json", "pnpm-lock.yaml"]
+      }
+    },
+    "web": {
+      "mainline": "development",
+      "releaseBranch": "production",
+      "tier3a": ["src/graphql/", "src/generated/", "src/lib/auth", "src/lib/stripe", "src/lib/billing", "middleware", "src/app/api/"],
+      "tier3b": [".github/workflows/", "vercel.json", "next.config"],
+      "tier2": ["src/app/", "src/components/", "src/features/", "src/sections/"],
+      "cosmeticOnly": ["public/", "docs/", ".md", "src/styles/", "e2e/", "src/translations/"],
+      "needs": {
+        "config": [".env.example", "src/env", "src/config"],
+        "strings": ["src/translations/", "locales/", "messages/"],
+        "pipeline": [".github/workflows/", "vercel.json"],
+        "dependencies": ["package.json", "pnpm-lock.yaml"]
+      }
+    },
+    "infra": {
+      "mainline": "main",
+      "releaseBranch": "main",
+      "tier3a": [],
+      "tier3b": ["."],
+      "tier2": [],
+      "cosmeticOnly": ["docs/", ".md"],
+      "needs": {
+        "infra": ["."],
+        "pipeline": [".github/workflows/"]
+      }
+    },
+    "localization": {
+      "mainline": "production",
+      "releaseBranch": "production",
+      "tier3a": ["prisma/", "src/app/api/", "supabase/"],
+      "tier3b": [".github/workflows/", "Dockerfile"],
+      "tier2": ["src/app/", "src/components/"],
+      "cosmeticOnly": ["docs/", ".md"],
+      "needs": {
+        "migration": ["prisma/migrations/", "supabase/migrations/"],
+        "config": [".env.example"],
+        "pipeline": [".github/workflows/", "Dockerfile"],
+        "dependencies": ["package.json", "pnpm-lock.yaml"]
+      }
+    }
+  },
+  "repositories": {
+    "abs-hexis/hexis-backend": "backend",
+    "abs-hexis/hexis-engines-api": "engines",
+    "abs-hexis/hexis-expo-next": "mobile",
+    "abs-hexis/coach-desktop-next": "web",
+    "abs-hexis/b2b-portal": "web",
+    "abs-hexis/foods-dashboard": "web",
+    "abs-hexis/hexis-infra": "infra",
+    "abs-hexis/hexis-localization": "localization"
+  },
+  "botAuthors": ["dependabot[bot]", "renovate[bot]", "github-actions[bot]", "hexis-ci-automation[bot]", "semantic-release-bot"],
+  "releaseBranchPatterns": ["production-release", "release-", "to production", "Release "],
+  "evidenceHosts": [
+    "github.com",
+    "private-user-images.githubusercontent.com",
+    "user-images.githubusercontent.com",
+    "expo.dev",
+    "vercel.app",
+    "vercel.com",
+    "loom.com",
+    "www.loom.com",
+    "hexisapp.atlassian.net",
+    "app.notion.com",
+    "www.notion.so",
+    "preview.hexis.live",
+    "drive.google.com"
+  ],
+  "tierZeroMaxChangedLines": 20
+}
