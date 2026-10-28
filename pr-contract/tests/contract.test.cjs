@@ -10,7 +10,10 @@ const ledger = require('../action/ledger.cjs');
 
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'profiles.json'), 'utf8'));
 const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'pull_request_template.md'), 'utf8');
-const mobileExtra = fs.readFileSync(path.join(__dirname, '..', 'templates', 'mobile-extra.md'), 'utf8');
+const backendTemplate = fs.readFileSync(path.join(__dirname, '..', 'templates', 'hexis-backend.md'), 'utf8');
+const mobileExtra = '## Mobile delivery\n\nOTA\n\n## E2E tests\n\n- [ ] Listed the tests\n';
+const jira = require('../action/jira.cjs');
+const windowLib = require('../action/window.cjs');
 
 const RUN = 'https://github.com/abs-hexis/hexis-backend/actions/runs/40482633156';
 const SHOT = 'https://github.com/user-attachments/assets/3f1c2d9e-before.png';
@@ -39,6 +42,7 @@ function body(fields) {
     Tier: '1',
     'Release note': 'Weekly training hours are saved as a number instead of a band.',
     'Deploy actions': 'none',
+    'Client compatibility': 'no API change',
     'Cross-repo dependencies': NONE_TABLE,
     Evidence: `${RUN}\n${SHOT}`,
     'Operational evidence': 'Outcome: profile save returns the hours. Signal: existing GraphQL error rate dashboard. Owner: author, 3 days. Recovery: revert.',
@@ -50,8 +54,8 @@ function body(fields) {
 test('template sections parse and the untouched template fails as empty, not as missing', () => {
   const sections = contract.parseSections(template);
   for (const name of contract.REQUIRED_SECTIONS) assert.ok(name.toLowerCase() in sections, `section ${name}`);
-  const result = contract.evaluate({ pr: pr({ body: template }), files: [file('src/lib/activity-volume.ts')], config, profileName: 'backend' });
-  assert.ok(!result.findings.some((f) => f.includes('Missing section')));
+  const result = contract.evaluate({ pr: pr({ body: backendTemplate }), files: [file('src/lib/activity-volume.ts')], config, profileName: 'backend' });
+  assert.ok(!result.findings.some((f) => f.includes('Missing section')), result.findings.join('\n'));
   assert.ok(result.findings.some((f) => f.startsWith('Change section is empty')));
   assert.ok(result.findings.some((f) => f.startsWith('Release note is empty')));
   // The template's own `none` dependency row is valid as shipped.
@@ -222,4 +226,78 @@ test('the sticky comment lists findings, the derived tier and dependency states'
   assert.match(text, /Fix before merge/);
   assert.match(text, /hexis-backend \[#559\]/);
   assert.match(text, /open against development/);
+});
+
+test('every per-repository template carries the required sections and its profile extras', () => {
+  for (const [profileName, profile] of Object.entries(config.profiles)) {
+    if (!profile.template) continue;
+    const text = fs.readFileSync(path.join(__dirname, '..', 'templates', profile.template), 'utf8');
+    const sections = contract.parseSections(text);
+    for (const name of contract.REQUIRED_SECTIONS.concat(profile.extraSections || [])) {
+      assert.ok(name.toLowerCase() in sections, `${profile.template} lacks ## ${name}`);
+    }
+  }
+});
+
+test('backend API-surface changes need a real compatibility statement', () => {
+  const files = [file('src/schema/user/user.resolvers.ts'), file('types-package/src/index.ts')];
+  const compatBody = (text) => body({ 'Client compatibility': text });
+  const noChange = contract.evaluate({ pr: pr({ body: compatBody('no API change') }), files, config, profileName: 'backend' });
+  assert.ok(noChange.findings.some((f) => f.includes('says no API change')));
+  const additive = contract.evaluate({ pr: pr({ body: compatBody('Additive: new nullable field User.totalActivityHours. Production coach (184 ops) and mobile (90 ops) validate. Types package 1.251.0.') }), files, config, profileName: 'backend' });
+  assert.ok(!additive.findings.some((f) => f.includes('Client compatibility')), additive.findings.join('\n'));
+  const withoutSection = body({}).replace(/## Client compatibility\n\nno API change\n/, '');
+  const missing = contract.evaluate({ pr: pr({ body: withoutSection }), files: [file('src/lib/x.ts')], config, profileName: 'backend' });
+  assert.ok(missing.findings.some((f) => f.includes('Missing section `## Client compatibility`')));
+});
+
+test('engine changes need a CHANGELOG entry, an Engine release statement, a cutover note and a carrying PR', () => {
+  const enginesBody = (extra) => body({ Tier: '3a', Evidence: 'https://github.com/abs-hexis/hexis-engines-api/actions/runs/40482633156\n\n```\n312 passed in 41.2s\n```', 'Engine release': 'CHANGELOG yes · carb ranges change · comparison attached · science review no', ...extra });
+  const noChangelog = contract.evaluate({ pr: pr({ body: enginesBody({}), repo: 'abs-hexis/hexis-engines-api' }), files: [file('engines/carb_ranges.py'), file('engines/calculation_bundles.py')], config, profileName: 'engines' });
+  assert.ok(noChangelog.findings.some((f) => f.includes('CHANGELOG.txt')));
+  assert.ok(noChangelog.findings.some((f) => f.includes('cutover date')));
+  assert.ok(noChangelog.findings.some((f) => f.includes('carrying PR')));
+  const good = contract.evaluate({
+    pr: pr({
+      body: enginesBody({
+        'Deploy actions': 'engine pin via backend release PR; cutover bundle_20261029 switches /day to the continuous model',
+        'Cross-repo dependencies': '| Repository | PR | Order | Why |\n| --- | --- | --- | --- |\n| hexis-backend | unopened HEX-2545 | together | pin |',
+      }),
+      repo: 'abs-hexis/hexis-engines-api',
+    }),
+    files: [file('engines/carb_ranges.py'), file('engines/calculation_bundles.py'), file('CHANGELOG.txt')],
+    config,
+    profileName: 'engines',
+  });
+  assert.deepEqual(good.findings, [], good.findings.join('\n'));
+  assert.equal(good.contract.engineRelease.startsWith('CHANGELOG yes'), true);
+});
+
+test('jira helpers name versions and render a marked comment', () => {
+  assert.equal(jira.nextVersionName('backend'), 'backend next');
+  assert.equal(jira.releasedVersionName('mobile', '2026-11-05'), 'mobile 2026-11-05');
+  const result = contract.evaluate({ pr: pr({ body: body({ 'Cross-repo dependencies': BACKEND_DEP }), repo: 'abs-hexis/coach-desktop-next' }), files: [file('src/app/x.tsx')], config, profileName: 'web' });
+  const lines = jira.mergedCommentText(result.contract, 'abs-hexis/coach-desktop-next');
+  assert.match(lines[0], /Merged to coach-desktop-next mainline: PR #559 \(tier 2\)/);
+  assert.match(lines.join('\n'), /hexis-backend #559 \(before\)/);
+  const doc = jira.adfDocument(lines, 'pr-contract coach-desktop-next');
+  assert.equal(doc.type, 'doc');
+  assert.match(jira.adfText(doc), /\[pr-contract coach-desktop-next\]/);
+});
+
+test('the release window joins drafts, orders repositories and lists tickets', () => {
+  const backend = contract.evaluate({ pr: pr({ body: body({ Tier: '3a', 'Deploy actions': 'migration x (additive)' }), merged: '2026-10-22T08:00:00Z' }), files: [file('prisma/migrations/x/migration.sql'), file('prisma/schema.prisma')], config, profileName: 'backend' }).contract;
+  const mobile = contract.evaluate({ pr: pr({ number: 622, branch: 'HEX-2550-hours', repo: 'abs-hexis/hexis-expo-next', body: body({ Tier: '2', 'Release note': 'Training hours are a number.', 'Cross-repo dependencies': BACKEND_DEP }) + '\n' + mobileExtra.replace('OTA', 'Store build 3.16.3'), merged: '2026-10-22T09:00:00Z' }), files: [file('src/screens/onboarding/x.tsx')], config, profileName: 'mobile' }).contract;
+  const drafts = [
+    { repo: 'abs-hexis/hexis-expo-next', mainline: 'development', draftUrl: 'https://github.com/abs-hexis/hexis-expo-next/releases/1', ledger: { startedAt: '2026-10-22', entries: [mobile] } },
+    { repo: 'abs-hexis/hexis-backend', mainline: 'development', draftUrl: 'https://github.com/abs-hexis/hexis-backend/releases/2', ledger: { startedAt: '2026-10-22', entries: [backend] } },
+    { repo: 'abs-hexis/hexis-infra', mainline: 'main', draftUrl: null, ledger: { startedAt: null, entries: [] } },
+  ];
+  const text = windowLib.renderWindow(drafts, { jiraStatuses: { 'HEX-2550': { status: 'IN DEV', summary: 'Add totalActivityHours' } }, generatedAt: '2026-10-28T10:00:00Z' });
+  assert.match(text, /\| hexis-expo-next \| 1 \| 1 \| 2×1 \|  \| yes \|/);
+  assert.match(text, /\*\*Deploy first:\*\* hexis-backend/);
+  assert.match(text, /\| \[HEX-2550\]\(https:\/\/hexisapp.atlassian.net\/browse\/HEX-2550\) \| IN DEV \|/);
+  assert.match(text, /\*\*Not QA Done:\*\* HEX-2550/);
+  assert.match(text, /### hexis-expo-next\n- Training hours are a number/);
+  assert.match(text, /hexis-infra \| 0 \| 0/);
 });

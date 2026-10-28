@@ -1,0 +1,46 @@
+# Renders the cross-repository "Release window" issue in this repository from every production
+# repository's draft "Next release". Reads the other repositories through the hexis-ci-automation
+# GitHub App (CI_APP_ID / CI_APP_PRIVATE_KEY, the same pair hexis-engines-api uses); Jira statuses
+# come from JIRA_EMAIL / JIRA_API_TOKEN when present.
+
+name: Release window
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: release-window
+  cancel-in-progress: true
+
+jobs:
+  window:
+    name: Render the release window
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Token that can read every production repository
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          owner: abs-hexis
+          repositories: hexis-backend,hexis-engines-api,hexis-expo-next,coach-desktop-next,b2b-portal,foods-dashboard,hexis-infra,hexis-localization,pr-agent
+          permission-contents: read
+          permission-issues: write
+      - uses: ./pr-contract/action
+        with:
+          mode: window
+          token: ${{ steps.app-token.outputs.token }}
+          window-repository: ${{ github.repository }}
+          jira-email: ${{ secrets.JIRA_EMAIL }}
+          jira-token: ${{ secrets.JIRA_API_TOKEN }}

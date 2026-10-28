@@ -4,6 +4,10 @@
     "backend": {
       "mainline": "development",
       "releaseBranch": "production",
+      "template": "hexis-backend.md",
+      "extraSections": ["Client compatibility"],
+      "contractPaths": ["src/schema/", "src/api/routes/", "types-package/", "codegen.ts", "scripts/export-graphql-schema.ts"],
+      "contractNoChangeWords": ["no api change", "no sdl change", "additive"],
       "tier3a": ["prisma/", "src/lib/billing/", "src/lib/internal-b2b/", "src/lib/stripe", "src/lib/auth-context", "src/lib/clerk", "src/api/routes/auth", "src/api/controllers/auth", "src/lib/modular-integrations/core/", "python-engine", "scripts/export-graphql-schema.ts"],
       "tier3b": [".github/workflows/", "Dockerfile", "docker/", "scripts/sync-db-schema", "scripts/deploy"],
       "tier2": ["src/lib/modular-integrations/", "src/jobs/", "src/workers/", "src/lib/typesense"],
@@ -21,6 +25,11 @@
     "engines": {
       "mainline": "development",
       "releaseBranch": "production",
+      "template": "hexis-engines-api.md",
+      "extraSections": ["Engine release"],
+      "changelog": "CHANGELOG.txt",
+      "cutoverPaths": ["engines/calculation_bundles.py"],
+      "dependencyRequiredAboveTier": "0",
       "tier3a": ["engines/", "services.py", "calculation_bundles"],
       "tier3b": [".github/workflows/", "Dockerfile"],
       "tier2": [],
@@ -34,6 +43,9 @@
     "mobile": {
       "mainline": "development",
       "releaseBranch": "production",
+      "template": "hexis-expo-next.md",
+      "extraSections": ["Mobile delivery", "E2E tests"],
+      "graphqlPaths": ["src/graphql/"],
       "tier3a": ["src/graphql/", "src/lib/auth", "src/providers/auth", "src/lib/billing", "src/lib/instrumentation", "src/screens/auth"],
       "tier3b": [".github/workflows/", ".eas/", "eas.json", "scripts/", ".github/scripts/"],
       "tier2": ["src/app/", "src/components/", "src/screens/onboarding", "src/screens/food-log", "src/screens/home", "src/navigation"],
@@ -49,6 +61,9 @@
     "web": {
       "mainline": "development",
       "releaseBranch": "production",
+      "template": "coach-desktop-next.md",
+      "extraSections": [],
+      "graphqlPaths": ["src/graphql/", "src/generated/"],
       "tier3a": ["src/graphql/", "src/generated/", "src/lib/auth", "src/lib/stripe", "src/lib/billing", "middleware", "src/app/api/"],
       "tier3b": [".github/workflows/", "vercel.json", "next.config"],
       "tier2": ["src/app/", "src/components/", "src/features/", "src/sections/"],
@@ -85,6 +100,18 @@
         "pipeline": [".github/workflows/", "Dockerfile"],
         "dependencies": ["package.json", "pnpm-lock.yaml"]
       }
+    }
+  },
+  "jira": {
+    "baseUrl": "https://hexisapp.atlassian.net",
+    "project": "HEX",
+    "versionPrefix": {
+      "backend": "backend",
+      "engines": "engines",
+      "mobile": "mobile",
+      "web": "coach",
+      "infra": "infra",
+      "localization": "localization"
     }
   },
   "repositories": {

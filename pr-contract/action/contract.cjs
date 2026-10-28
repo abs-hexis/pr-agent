@@ -314,11 +314,8 @@ function evaluate({ pr, files, config, profileName }) {
   const sections = parseSections(pr.body || '');
   const findings = [];
 
-  for (const name of REQUIRED_SECTIONS) {
+  for (const name of REQUIRED_SECTIONS.concat(profile.extraSections || [])) {
     if (sectionText(sections, name) === null) findings.push(`Missing section \`## ${name}\`. Start from the PR template.`);
-  }
-  if (profileName === 'mobile' && sectionText(sections, 'Mobile delivery') === null) {
-    findings.push('Missing section `## Mobile delivery` (OTA or store build).');
   }
 
   const key = hexKey(pr.head?.ref, pr.title);
@@ -352,12 +349,41 @@ function evaluate({ pr, files, config, profileName }) {
   const ownRepository = (pr.base?.repo?.full_name || '').replace(/^abs-hexis\//, '');
   const dependencies = parseDependencies(sectionText(sections, 'Cross-repo dependencies'), ownRepository);
   findings.push(...dependencies.findings);
-  if (profileName === 'mobile' || profileName === 'web') {
-    const graphqlChanged = files.some((f) => f.filename.startsWith('src/graphql/') || f.filename.startsWith('src/generated/'));
+  if (profile.graphqlPaths && profile.graphqlPaths.length) {
+    const graphqlChanged = files.some((f) => pathMatches(f.filename, profile.graphqlPaths));
     const namesBackend = dependencies.rows.some((r) => r.repository === 'hexis-backend');
     if (graphqlChanged && !namesBackend && dependencies.none) {
       findings.push('GraphQL operations or generated types changed but no hexis-backend dependency is declared. Name the backend PR (order: before) or state why the production schema already has the fields in the Why column.');
     }
+  }
+
+  // Backend: a change to the API surface must come with a compatibility statement for the shipped clients.
+  if (profile.contractPaths && profile.contractPaths.length) {
+    const compat = sectionText(sections, 'Client compatibility');
+    const contractChanged = files.filter((f) => pathMatches(f.filename, profile.contractPaths) && !/\.test\.[tj]s$/.test(f.filename));
+    if (compat !== null) {
+      const saysNoChange = (profile.contractNoChangeWords || []).some((w) => (compat || '').toLowerCase().includes(w));
+      if (isEmpty(compat)) findings.push('Client compatibility is empty. State breaking or additive, which production coach/mobile operations still validate, or `no API change`.');
+      else if (contractChanged.length && saysNoChange && /no (api|sdl) change/.test(compat.toLowerCase())) {
+        findings.push(`API surface files changed (${contractChanged.slice(0, 3).map((f) => f.filename).join(', ')}) but Client compatibility says no API change. State breaking or additive and the types-package version.`);
+      }
+    }
+  }
+
+  // Engines: every change carries a CHANGELOG line, a release statement, and a cutover note when bundles move.
+  if (profile.changelog) {
+    const changelogTouched = files.some((f) => f.filename === profile.changelog);
+    const docsOnly = files.length > 0 && files.every((f) => pathMatches(f.filename, profile.cosmeticOnly || []));
+    if (!changelogTouched && !docsOnly) findings.push(`\`${profile.changelog}\` has no entry for this change. Add one under [UNRELEASED].`);
+    const release = sectionText(sections, 'Engine release');
+    if (release !== null && isEmpty(release)) findings.push('Engine release is empty. State the CHANGELOG entry, which recommendation outputs change, the reference-athlete comparison and whether science review is needed.');
+    const cutoverTouched = files.some((f) => pathMatches(f.filename, profile.cutoverPaths || []));
+    if (cutoverTouched && !/cutover|bundle_20\d{6}|date/i.test(`${deploy || ''} ${release || ''}`)) {
+      findings.push('calculation_bundles.py changed but no cutover date is declared in Deploy actions or Engine release.');
+    }
+  }
+  if (profile.dependencyRequiredAboveTier !== undefined && dependencies.none && tierRank(tier) > tierRank(profile.dependencyRequiredAboveTier)) {
+    findings.push(`Tier ${tier} changes in this repository reach production through another repository. Name the carrying PR (hexis-backend pin) or \`unopened\` with the ticket.`);
   }
 
   const evidence = sectionText(sections, 'Evidence');
@@ -371,7 +397,7 @@ function evaluate({ pr, files, config, profileName }) {
     findings.push('`existing coverage` is only accepted at Tier 0. Name the signal and the responder.');
   }
 
-  if (profileName === 'mobile') {
+  if (sectionText(sections, 'Mobile delivery') !== null) {
     const delivery = (sectionText(sections, 'Mobile delivery') || '').toLowerCase();
     const storeBuildImplied = needs.has('store-build');
     if (storeBuildImplied && !delivery.includes('store')) {
@@ -398,7 +424,10 @@ function evaluate({ pr, files, config, profileName }) {
     operationalEvidence: (operational || '').trim(),
     evidenceLinks: extractUrls(evidence),
     needs: needsObject,
-    mobileDelivery: profileName === 'mobile' ? (sectionText(sections, 'Mobile delivery') || '').trim().split('\n')[0] : null,
+    mobileDelivery: sectionText(sections, 'Mobile delivery') !== null ? (sectionText(sections, 'Mobile delivery') || '').trim().split('\n')[0] : null,
+    clientCompatibility: sectionText(sections, 'Client compatibility') !== null ? (sectionText(sections, 'Client compatibility') || '').trim() : null,
+    engineRelease: sectionText(sections, 'Engine release') !== null ? (sectionText(sections, 'Engine release') || '').trim() : null,
+    repository: pr.base?.repo?.full_name || null,
   };
 
   return { skipped, findings, labels, contract, tier, needs: needsObject, derived };

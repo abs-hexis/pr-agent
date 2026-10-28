@@ -1,6 +1,7 @@
 # Copy into each application repository as .github/workflows/release-notes.yml.
-# A PR merged into the mainline is added to the draft GitHub Release "Next release".
-# A PR merged into the release branch publishes that draft under the date and the next merge starts a new one.
+# A PR merged into the mainline is added to the draft GitHub Release "Next release" and, when the
+# JIRA_EMAIL / JIRA_API_TOKEN secrets exist, its ticket gets fixVersion "<app> next" and a contract comment.
+# A PR merged into production publishes that draft under the date, releases the Jira version and starts a new one.
 # Repositories whose mainline is also the release branch (hexis-infra, hexis-localization) only accrue.
 
 name: Release notes
@@ -28,6 +29,8 @@ jobs:
         with:
           mode: accrue
           token: ${{ secrets.GITHUB_TOKEN }}
+          jira-email: ${{ secrets.JIRA_EMAIL }}
+          jira-token: ${{ secrets.JIRA_API_TOKEN }}
 
   publish:
     name: Publish the release notes
@@ -39,3 +42,5 @@ jobs:
         with:
           mode: publish
           token: ${{ secrets.GITHUB_TOKEN }}
+          jira-email: ${{ secrets.JIRA_EMAIL }}
+          jira-token: ${{ secrets.JIRA_API_TOKEN }}

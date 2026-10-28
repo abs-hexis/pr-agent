@@ -1,14 +1,15 @@
 name: Hexis PR contract
 description: >
-  Validates a pull request against the Hexis PR contract (tier, release note, deploy actions, dependencies,
-  evidence, operational evidence), labels it, and accrues merged PRs into the draft "Next release".
+  Validates a pull request against the Hexis PR contract (tier, release note, deploy actions, cross-repo dependencies,
+  evidence, operational evidence), labels it, accrues merged PRs into the draft "Next release", publishes the release
+  notes, records fixVersions in Jira, and renders the cross-repository release window.
 inputs:
   mode:
-    description: check | accrue | publish
+    description: check | accrue | publish | window
     required: false
     default: check
   token:
-    description: GitHub token with pull-requests:write, issues:write and contents:write (for releases)
+    description: GitHub token. check needs pull-requests:write and issues:write; accrue/publish need contents:write; window needs read on every production repository and issues:write on the window repository.
     required: true
   profile:
     description: Override the repository profile (backend, engines, mobile, web, infra, localization)
@@ -16,6 +17,18 @@ inputs:
     default: ""
   pr-number:
     description: Pull request number when not running on a pull_request event
+    required: false
+    default: ""
+  jira-email:
+    description: Atlassian account email for Jira writes (optional; with jira-token enables fixVersions and comments)
+    required: false
+    default: ""
+  jira-token:
+    description: Atlassian API token for Jira writes (optional)
+    required: false
+    default: ""
+  window-repository:
+    description: Repository that holds the "Release window" issue (window mode; defaults to the current repository)
     required: false
     default: ""
   template-url:
@@ -32,6 +45,9 @@ outputs:
   tickets:
     description: Comma-separated HEX keys (publish mode)
     value: ${{ steps.run.outputs.tickets }}
+  url:
+    description: The release window issue URL (window mode)
+    value: ${{ steps.run.outputs.url }}
 runs:
   using: composite
   steps:
@@ -49,4 +65,7 @@ runs:
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_CONTRACT_TEMPLATE_URL: ${{ inputs.template-url }}
         PR_CONTRACT_CONFIG: ${{ github.action_path }}/../config/profiles.json
+        JIRA_EMAIL: ${{ inputs.jira-email }}
+        JIRA_API_TOKEN: ${{ inputs.jira-token }}
+        WINDOW_REPOSITORY: ${{ inputs.window-repository }}
       run: node "${{ github.action_path }}/run.cjs"

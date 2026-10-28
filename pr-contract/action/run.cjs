@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 'use strict';
 
-// Entry point for the composite action. Three modes:
+// Entry point for the composite action. Four modes:
 //   check    validate an open PR against the contract, label it, post the sticky comment, fail on findings
-//   accrue   a PR merged into the mainline: add its contract to the draft "Next release"
-//   publish  a release PR merged into the release branch: publish the draft under the date and start a new one
+//   accrue   a PR merged into the mainline: add its contract to the draft "Next release"; Jira fixVersion + comment when configured
+//   publish  a release PR merged into the release branch: publish the draft under the date; Jira version released when configured
+//   window   join every repository's draft into one "Release window" issue (runs in the pr-agent repository on a schedule)
 //
 // Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_EVENT_PATH (or PR_NUMBER), PR_CONTRACT_MODE,
-// PR_CONTRACT_PROFILE (optional override), PR_CONTRACT_CONFIG (path to profiles.json).
+// PR_CONTRACT_PROFILE (optional override), PR_CONTRACT_CONFIG (path to profiles.json),
+// JIRA_EMAIL + JIRA_API_TOKEN (optional; enables Jira writes), WINDOW_REPOSITORY (window mode: where the issue lives).
 
 const fs = require('node:fs');
 const path = require('node:path');
 const contract = require('./contract.cjs');
 const ledgerLib = require('./ledger.cjs');
+const jiraLib = require('./jira.cjs');
+const windowLib = require('./window.cjs');
 const { client, upsertStickyComment, applyOwnedLabels } = require('./github.cjs');
 
 const MARKER = '<!-- pr-contract -->';
@@ -40,6 +44,13 @@ function writeOutput(name, value) {
   const file = process.env.GITHUB_OUTPUT;
   if (!file) return;
   fs.appendFileSync(file, `${name}<<EOF\n${value}\nEOF\n`);
+}
+
+function jiraFromEnv(config) {
+  const email = process.env.JIRA_EMAIL;
+  const token = process.env.JIRA_API_TOKEN;
+  if (!email || !token) return null;
+  return jiraLib.client({ baseUrl: process.env.JIRA_BASE_URL || config.jira.baseUrl, email, token });
 }
 
 // Looks up each declared dependency PR so the comment and the ledger show whether it is open,
@@ -130,6 +141,18 @@ async function modeAccrue({ gh, repo, number, config, profileName }) {
     });
   }
   console.log(`Accrued #${number} into "${ledgerLib.DRAFT_NAME}" (${updated.entries.length} entries)`);
+
+  const jira = jiraFromEnv(config);
+  if (jira) {
+    try {
+      const outcome = await jiraLib.recordMerge(jira, { project: config.jira.project, prefix: config.jira.versionPrefix[profileName] || profileName, contract: result.contract, repo });
+      console.log(`Jira: ${JSON.stringify(outcome)}`);
+    } catch (error) {
+      console.log(`::warning::Jira update failed: ${error.message}`);
+    }
+  } else {
+    console.log('::notice::Jira not configured (JIRA_EMAIL / JIRA_API_TOKEN); skipped fixVersion and comment');
+  }
   return 0;
 }
 
@@ -148,15 +171,49 @@ async function modePublish({ gh, repo, number, config, profileName }) {
   const date = pr.merged_at.slice(0, 10);
   const ledger = ledgerLib.readLedger(draft.body);
   const body = `${draft.body}\n\nPublished from release PR #${pr.number} (${pr.merge_commit_sha}) on ${pr.merged_at}.`;
-  await gh.updateRelease(repo, draft.id, {
+  const published = await gh.updateRelease(repo, draft.id, {
     tag_name: `release/${date}`,
     target_commitish: pr.merge_commit_sha,
     name: ledgerLib.releaseTitleForDate(repo, date),
     body,
     draft: false,
   });
-  writeOutput('tickets', ledger.entries.map((e) => e.ticket).filter(Boolean).join(','));
+  const tickets = [...new Set(ledger.entries.map((e) => e.ticket).filter(Boolean))];
+  writeOutput('tickets', tickets.join(','));
   console.log(`Published ${ledgerLib.releaseTitleForDate(repo, date)} with ${ledger.entries.length} PRs`);
+
+  const jira = jiraFromEnv(config);
+  if (jira) {
+    try {
+      const outcome = await jiraLib.recordRelease(jira, { project: config.jira.project, prefix: config.jira.versionPrefix[profileName] || profileName, date, tickets, repo, releaseUrl: published ? published.html_url : '' });
+      console.log(`Jira: ${JSON.stringify(outcome)}`);
+    } catch (error) {
+      console.log(`::warning::Jira release update failed: ${error.message}`);
+    }
+  }
+  return 0;
+}
+
+async function modeWindow({ gh, config }) {
+  const repos = Object.keys(config.repositories);
+  const drafts = await windowLib.collectDrafts(gh, repos, config);
+  const tickets = [...new Set(drafts.flatMap((d) => d.ledger.entries.map((e) => e.ticket)).filter(Boolean))];
+  const jira = jiraFromEnv(config);
+  const jiraStatuses = jira ? await jiraLib.ticketStatuses(jira, tickets) : {};
+  const body = windowLib.renderWindow(drafts, { jiraStatuses, generatedAt: new Date().toISOString() });
+  const target = process.env.WINDOW_REPOSITORY || process.env.GITHUB_REPOSITORY;
+  const issues = await gh.listIssues(target, 'release-window');
+  const existing = issues.find((i) => typeof i.body === 'string' && i.body.includes(windowLib.ISSUE_MARKER));
+  if (existing) {
+    await gh.updateIssue(target, existing.number, { body, title: windowLib.ISSUE_TITLE });
+    console.log(`Release window updated: ${existing.html_url}`);
+    writeOutput('url', existing.html_url);
+  } else {
+    await gh.ensureLabel(target, 'release-window', '0e8a16', 'The joined release window across repositories');
+    const created = await gh.createIssue(target, { title: windowLib.ISSUE_TITLE, body, labels: ['release-window'] });
+    console.log(`Release window created: ${created.html_url}`);
+    writeOutput('url', created.html_url);
+  }
   return 0;
 }
 
@@ -164,17 +221,20 @@ async function main() {
   const config = loadConfig();
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) throw new Error('GITHUB_REPOSITORY is required');
+  const gh = client(process.env.GITHUB_TOKEN);
+  const mode = process.env.PR_CONTRACT_MODE || 'check';
+  if (mode === 'window') {
+    process.exitCode = await modeWindow({ gh, config });
+    return;
+  }
   const event = loadEvent();
   const number = Number(process.env.PR_NUMBER || (event.pull_request && event.pull_request.number));
   if (!number) throw new Error('No pull request number (PR_NUMBER or pull_request event)');
   const profileName = resolveProfile(config, repo);
-  const gh = client(process.env.GITHUB_TOKEN);
-  const mode = process.env.PR_CONTRACT_MODE || 'check';
   const args = { gh, repo, number, config, profileName };
   const handlers = { check: modeCheck, accrue: modeAccrue, publish: modePublish };
   if (!handlers[mode]) throw new Error(`Unknown mode ${mode}`);
-  const exitCode = await handlers[mode](args);
-  process.exitCode = exitCode;
+  process.exitCode = await handlers[mode](args);
 }
 
 if (require.main === module) {
@@ -184,4 +244,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { modeCheck, modeAccrue, modePublish, resolveProfile };
+module.exports = { modeCheck, modeAccrue, modePublish, modeWindow, resolveProfile };

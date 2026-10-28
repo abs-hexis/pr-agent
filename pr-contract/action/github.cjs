@@ -56,6 +56,9 @@ function client(token) {
         await request('POST', `/repos/${repo}/labels`, { name, color, description });
       }
     },
+    listIssues: (repo, label) => paginate(`/repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}`),
+    createIssue: (repo, payload) => request('POST', `/repos/${repo}/issues`, payload),
+    updateIssue: (repo, number, payload) => request('PATCH', `/repos/${repo}/issues/${number}`, payload),
     listReleases: (repo) => paginate(`/repos/${repo}/releases`),
     createRelease: (repo, payload) => request('POST', `/repos/${repo}/releases`, payload),
     updateRelease: (repo, id, payload) => request('PATCH', `/repos/${repo}/releases/${id}`, payload),
